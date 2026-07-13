@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sink Writer - Sink OS V1.2</title>
+  <link rel="icon" href="favicon.png" type="image/x-icon">
+
+  <!-- Optional: Google Fonts for extra families -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Roboto:wght@400;500&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --accent: #3B6DF5;
+      --accent-hover: #3058C8;
+      --accent-soft: #E3EBFF;
+
+      --bg: #f3f3f3;
+      --surface: #ffffff;
+      --surface-soft: #f7f7f7;
+      --border: #dcdcdc;
+      --text: #222222;
+      --muted: #777777;
+
+      --titlebar-bg: #e4e4e4;
+      --ribbon-bg: #f7f7f7;
+      --status-bg: #f7f7f7;
+
+      --editor-page-bg: #ffffff;
+      --editor-text: #222222;
+    }
+
+    /* Pure black theme */
+    body[data-theme="pureblack"] {
+      --bg: #000000;
+      --surface: #111111;
+      --surface-soft: #101010;
+      --border: #222222;
+      --text: #f5f5f5;
+      --muted: #aaaaaa;
+
+      --titlebar-bg: #0d0d0d;
+      --ribbon-bg: #101010;
+      --status-bg: #101010;
+
+      --editor-page-bg: #111111;
+      --editor-text: #f5f5f5;
+    }
+
+    /* Sink OS signature dark theme */
+    body[data-theme="sinkdark"] {
+      --bg: #0a0f1f;
+      --surface: #111a2e;
+      --surface-soft: #10182b;
+      --border: #1b2438;
+      --text: #dce3ff;
+      --muted: #8f9ac2;
+
+      --titlebar-bg: #10182b;
+      --ribbon-bg: #10182b;
+      --status-bg: #10182b;
+
+      --editor-page-bg: #141e33;
+      --editor-text: #e3e8ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    /* Title bar */
+    .titlebar {
+      height: 32px;
+      background: var(--titlebar-bg);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      border-bottom: 1px solid var(--border);
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .titlebar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .titlebar-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .titlebar-app {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .titlebar-doc {
+      color: var(--muted);
+    }
+
+    .titlebar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .titlebar-user {
+      font-size: 11px;
+      color: var(--muted);
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .titlebar-btn {
+      width: 28px;
+      height: 20px;
+      border-radius: 3px;
+      border: none;
+      background: transparent;
+      font-size: 11px;
+      cursor: pointer;
+      color: var(--muted);
+    }
+
+    .titlebar-btn:hover {
+      background: rgba(0,0,0,0.08);
+    }
+
+    .titlebar-btn.close:hover {
+      background: #e81123;
+      color: #ffffff;
+    }
+
+    /* Toolbar */
+    .toolbar {
+      height: 42px;
+      background: var(--surface-soft);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 12px;
+    }
+
+    .menu-button {
+      border: none;
+      background: transparent;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 4px 10px;
+      border-radius: 4px;
+      color: var(--text);
+    }
+
+    .menu-button:hover {
+      background: rgba(0,0,0,0.06);
+    }
+
+    .menu-button.primary {
+      background: var(--accent);
+      color: #ffffff;
+    }
+
+    .menu-button.primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .menu-spacer {
+      flex: 1;
+    }
+
+    /* Ribbon tabs */
+    .ribbon-tabs {
+      display: flex;
+      gap: 16px;
+      padding: 0 16px;
+      background: var(--ribbon-bg);
+      border-bottom: 1px solid var(--border);
+      height: 32px;
+      align-items: flex-end;
+    }
+
+    .ribbon-tab {
+      font-size: 13px;
+      padding: 4px 8px;
+      cursor: pointer;
+      color: var(--muted);
+      border-radius: 4px 4px 0 0;
+    }
+
+    .ribbon-tab.active {
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-bottom: none;
+    }
+
+    /* Ribbon content */
+    .ribbon {
+      height: 72px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 8px 16px;
+      gap: 24px;
+      font-size: 13px;
+    }
+
+    .ribbon-group {
+      border-right: 1px solid rgba(0,0,0,0.08);
+      padding-right: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    body[data-theme="pureblack"] .ribbon-group,
+    body[data-theme="sinkdark"] .ribbon-group {
+      border-right-color: rgba(255,255,255,0.08);
+    }
+
+    .ribbon-group:last-child {
+      border-right: none;
+    }
+
+    .ribbon-group-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .ribbon-row {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .ribbon-select {
+      padding: 3px 6px;
+      font-size: 13px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--surface-soft);
+      color: var(--text);
+    }
+
+    .ribbon-btn {
+      border: 1px solid transparent;
+      background: transparent;
+      padding: 4px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 26px;
+      height: 26px;
+      color: var(--text);
+    }
+
+    .ribbon-btn:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+
+    .ribbon-btn.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+
+    .ribbon-btn-icon {
+      font-size: 14px;
+    }
+
+    .color-input {
+      width: 32px;
+      height: 24px;
+      padding: 0;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    /* Editor area */
+    .editor-wrapper {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      padding: 16px 0;
+      overflow: auto;
+    }
+
+    .editor-page {
+      width: 800px;
+      min-height: calc(100% - 32px);
+      background: var(--editor-page-bg);
+      border-radius: 4px;
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,0.06),
+        0 8px 24px rgba(0, 0, 0, 0.18);
+      padding: 40px 60px;
+      overflow: hidden;
+      transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+    }
+
+    #editor {
+      outline: none;
+      min-height: 600px;
+      line-height: 1.5;
+      font-size: 14px;
+      color: var(--editor-text);
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    #editor:empty::before {
+      content: "Start typing here...";
+      color: var(--muted);
+    }
+
+    /* File menu dropdown */
+    .file-menu {
+      position: relative;
+      display: inline-block;
+    }
+
+    .file-dropdown {
+      position: absolute;
+      top: 32px;
+      left: 0;
+      background: var(--surface);
+      border-radius: 4px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+      border: 1px solid var(--border);
+      min-width: 180px;
+      padding: 4px 0;
+      display: none;
+      z-index: 10;
+    }
+
+    .file-dropdown.open {
+      display: block;
+    }
+
+    .file-item {
+      padding: 6px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text);
+    }
+
+    .file-item:hover {
+      background: rgba(0,0,0,0.06);
+    }
+
+    .file-item span.icon {
+      font-size: 14px;
+    }
+
+    /* Status bar */
+    .statusbar {
+      height: 24px;
+      background: var(--status-bg);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* Drag & drop overlay */
+    .drop-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+
+    .drop-overlay.visible {
+      display: flex;
+    }
+
+    .drop-zone {
+      border: 2px dashed var(--accent);
+      border-radius: 12px;
+      background: rgba(0,0,0,0.4);
+      padding: 40px 60px;
+      color: #ffffff;
+      text-align: center;
+      max-width: 420px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+    }
+
+    .drop-zone h2 {
+      margin: 0 0 8px;
+      font-size: 20px;
+    }
+
+    .drop-zone p {
+      margin: 0 0 16px;
+      font-size: 13px;
+      opacity: 0.9;
+    }
+
+    .drop-zone button {
+      border: none;
+      background: #ffffff;
+      color: #000000;
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .drop-zone button:hover {
+      background: #f0f0f0;
+    }
+
+    /* Modal panel (used for both document picker and format picker) */
+    .picker-panel {
+      background: var(--surface);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      width: 420px;
+      max-width: 90vw;
+      max-height: 70vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      overflow: hidden;
+    }
+
+    .picker-panel.narrow {
+      width: 320px;
+    }
+
+    .picker-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .picker-header h2 {
+      margin: 0;
+      font-size: 15px;
+      color: var(--text);
+    }
+
+    .picker-close {
+      border: none;
+      background: transparent;
+      font-size: 16px;
+      cursor: pointer;
+      color: var(--muted);
+    }
+
+    .picker-list {
+      overflow-y: auto;
+      padding: 6px;
+      flex: 1;
+    }
+
+    .picker-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      gap: 8px;
+    }
+
+    .picker-item:hover {
+      background: var(--accent-soft);
+    }
+
+    .picker-item-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      overflow: hidden;
+    }
+
+    .picker-item-title-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .picker-item-title {
+      font-size: 13px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .format-badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .picker-item-date {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .picker-item-delete {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 4px 6px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .picker-item-delete:hover {
+      background: rgba(232, 17, 35, 0.12);
+      color: #e81123;
+    }
+
+    .picker-empty {
+      padding: 24px 16px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .format-options {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .format-option {
+      text-align: left;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-soft);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .format-option:hover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .format-option small {
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    /* Hyperlink style */
+    #editor a {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+
+    /* Heading styles */
+    #editor h1, #editor h2, #editor h3 {
+      margin-top: 1.2em;
+      margin-bottom: 0.4em;
+      font-weight: 600;
+    }
+
+    #editor h1 {
+      font-size: 26px;
+    }
+
+    #editor h2 {
+      font-size: 22px;
+    }
+
+    #editor h3 {
+      font-size: 18px;
+    }
+
+    /* Dark theme tweaks */
+    body[data-theme="pureblack"] .file-item:hover,
+    body[data-theme="sinkdark"] .file-item:hover {
+      background: rgba(255,255,255,0.08);
+    }
+
+    body[data-theme="pureblack"] .menu-button:hover,
+    body[data-theme="sinkdark"] .menu-button:hover {
+      background: rgba(255,255,255,0.06);
+    }
+
+    body[data-theme="pureblack"] .ribbon-btn:hover,
+    body[data-theme="sinkdark"] .ribbon-btn:hover {
+      background: rgba(59,109,245,0.18);
+    }
+  </style>
+</head>
+<body data-theme="light">
+
+  <!-- Drag & drop overlay -->
+  <div class="drop-overlay" id="dropOverlay">
+    <div class="drop-zone">
+      <h2>Drop image to insert</h2>
+      <p>Drag and drop an image file here, or click the button below.</p>
+      <button id="dropBrowseBtn">Browse files…</button>
+    </div>
+  </div>
+
+  <!-- Document picker overlay (Open) -->
+  <div class="drop-overlay" id="pickerOverlay">
+    <div class="picker-panel">
+      <div class="picker-header">
+        <h2>Open Document</h2>
+        <button class="picker-close" id="pickerCloseBtn">✖</button>
+      </div>
+      <div class="picker-list" id="pickerList">
+        <div class="picker-empty">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Format picker overlay (Save / Save As) -->
+  <div class="drop-overlay" id="formatOverlay">
+    <div class="picker-panel narrow">
+      <div class="picker-header">
+        <h2>Save as…</h2>
+        <button class="picker-close" id="formatCloseBtn">✖</button>
+      </div>
+      <div class="format-options">
+        <button class="format-option" data-format="pdf">
+          📄 PDF <small>Read-only export — best for sharing</small>
+        </button>
+        <button class="format-option" data-format="docx">
+          📝 Word Document (.docx) <small>Editable, reopens into Sink Writer</small>
+        </button>
+        <button class="format-option" data-format="txt">
+          🧾 Plain Text (.txt) <small>No formatting, just the words</small>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Title bar -->
+  <div class="titlebar">
+    <div class="titlebar-left">
+      <div class="titlebar-dot"></div>
+      <span class="titlebar-app">Sink Writer</span>
+      <span class="titlebar-doc" id="titlebarDoc">– Untitled Document</span>
+    </div>
+    <div class="titlebar-right">
+      <span class="titlebar-user" id="titlebarUser"></span>
+      <button class="titlebar-btn">–</button>
+      <button class="titlebar-btn close">×</button>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="file-menu">
+      <button class="menu-button primary" id="fileMenuButton">File</button>
+      <div class="file-dropdown" id="fileDropdown">
+        <div class="file-item" data-action="new">
+          <span class="icon">📄</span> New
+        </div>
+        <div class="file-item" data-action="open">
+          <span class="icon">📂</span> Open
+        </div>
+        <div class="file-item" data-action="save">
+          <span class="icon">💾</span> Save
+        </div>
+        <div class="file-item" data-action="saveas">
+          <span class="icon">📝</span> Save As
+        </div>
+        <div class="file-item" data-action="exportpdf">
+          <span class="icon">⬇</span> Download a copy (PDF)
+        </div>
+      </div>
+    </div>
+
+    <button class="menu-button">Home</button>
+    <button class="menu-button">Insert</button>
+    <button class="menu-button">View</button>
+
+    <div class="menu-spacer"></div>
+    <span style="font-size: 12px; color: var(--muted);">Sink OS V1.2</span>
+  </div>
+
+  <!-- Ribbon tabs -->
+  <div class="ribbon-tabs">
+    <div class="ribbon-tab active" data-tab="home">Home</div>
+    <div class="ribbon-tab" data-tab="insert">Insert</div>
+    <div class="ribbon-tab" data-tab="view">View</div>
+  </div>
+
+  <!-- Ribbon: Home -->
+  <div class="ribbon" id="ribbonHome">
+    <div class="ribbon-group">
+      <div class="ribbon-row">
+        <select id="fontSelect" class="ribbon-select">
+          <option value="Segoe UI">Segoe UI</option>
+          <option value="Arial">Arial</option>
+          <option value="Helvetica">Helvetica</option>
+          <option value="Inter">Inter</option>
+          <option value="Roboto">Roboto</option>
+          <option value="Georgia">Georgia</option>
+          <option value="Times New Roman">Times New Roman</option>
+          <option value="Courier New">Courier New</option>
+          <option value="JetBrains Mono">JetBrains Mono</option>
+          <option value="Fira Code">Fira Code</option>
+          <option value="Calibri">Calibri</option>
+          <option value="Cambria">Cambria</option>
+          <option value="Verdana">Verdana</option>
+        </select>
+        <select id="sizeSelect" class="ribbon-select">
+          <option value="12px">12</option>
+          <option value="14px" selected>14</option>
+          <option value="16px">16</option>
+          <option value="18px">18</option>
+          <option value="24px">24</option>
+          <option value="32px">32</option>
+        </select>
+      </div>
+      <div class="ribbon-group-title">Font</div>
+    </div>
+
+    <div class="ribbon-group">
+      <div class="ribbon-row">
+        <button class="ribbon-btn" data-cmd="bold"><span class="ribbon-btn-icon"><b>B</b></span></button>
+        <button class="ribbon-btn" data-cmd="italic"><span class="ribbon-btn-icon"><i>I</i></span></button>
+        <button class="ribbon-btn" data-cmd="underline"><span class="ribbon-btn-icon"><u>U</u></span></button>
+      </div>
+      <div class="ribbon-row">
+        <input type="color" id="fontColor" class="color-input" title="Text color">
+        <input type="color" id="highlightColor" class="color-input" title="Highlight">
+      </div>
+      <div class="ribbon-group-title">Style</div>
+    </div>
+
+    <div class="ribbon-group">
+      <div class="ribbon-row">
+        <button class="ribbon-btn" data-cmd="justifyLeft">⯇</button>
+        <button class="ribbon-btn" data-cmd="justifyCenter">≡</button>
+        <button class="ribbon-btn" data-cmd="justifyRight">⯈</button>
+      </div>
+      <div class="ribbon-row">
+        <button class="ribbon-btn" data-cmd="insertUnorderedList">• List</button>
+        <button class="ribbon-btn" data-cmd="insertOrderedList">1. List</button>
+      </div>
+      <div class="ribbon-group-title">Paragraph</div>
+    </div>
+
+    <div class="ribbon-group">
+      <div class="ribbon-row">
+        <select id="styleSelect" class="ribbon-select">
+          <option value="p">Normal</option>
+          <option value="h1">Heading 1</option>
+          <option value="h2">Heading 2</option>
+          <option value="h3">Heading 3</option>
+        </select>
+      </div>
+      <div class="ribbon-group-title">Styles</div>
+    </div>
+
+    <div class="ribbon-group">
+      <div class="ribbon-row">
+        <button class="ribbon-btn" id="insertLinkBtn">🔗 Link</button>
+        <button class="ribbon-btn" id="removeLinkBtn">✖ Link</button>
+      </div>
+      <div class="ribbon-group-title">Links</div>
+    </div>
+  </div>
+
+  <!-- Ribbon: Insert -->
+  <div class="ribbon" id="ribbonInsert" style="display:none;">
+    <div class="ribbon-group">
+      <div class="ribbon-row">
+        <button class="ribbon-btn" id="insertImageBtn">🖼 Image</button>
+        <button class="ribbon-btn" id="insertLineBtn">─ Line</button>
+        <button class="ribbon-btn" id="insertDateBtn">📅 Date/Time</button>
+      </div>
+      <div class="ribbon-group-title">Insert</div>
+    </div>
+  </div>
+
+  <!-- Ribbon: View -->
+  <div class="ribbon" id="ribbonView" style="display:none;">
+    <div class="ribbon-group">
+      <div class="ribbon-row">
+        <button class="ribbon-btn" id="zoomInBtn">＋ Zoom In</button>
+        <button class="ribbon-btn" id="zoomOutBtn">－ Zoom Out</button>
+      </div>
+      <div class="ribbon-group-title">Zoom</div>
+    </div>
+
+    <div class="ribbon-group">
+      <div class="ribbon-row">
+        <button class="ribbon-btn" data-theme="light">☀ Light</button>
+        <button class="ribbon-btn" data-theme="pureblack">⬛ Pure Black</button>
+        <button class="ribbon-btn" data-theme="sinkdark">🌌 Sink Dark</button>
+      </div>
+      <div class="ribbon-group-title">Theme</div>
+    </div>
+  </div>
+
+  <!-- Editor -->
+  <div class="editor-wrapper">
+    <div class="editor-page" id="editorPage">
+      <div id="editor" contenteditable="true" spellcheck="true"></div>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="statusbar">
+    <span id="statusText">Ready</span>
+    <span id="zoomStatus">100%</span>
+  </div>
+
+  <!-- Libraries: Supabase, docx read/write, PDF export -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+  <script>
+    // ---------------------------------------------------------------
+    // Supabase setup — same project as SinkOSAuth / Chat / Calls / Nexus
+    // ---------------------------------------------------------------
+    const SUPABASE_URL = "https://okknkixdbjsnqrwlfgzn.supabase.co";       // <-- fill in
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ra25raXhkYmpzbnFyd2xmZ3puIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NzgwNzQsImV4cCI6MjA5ODE1NDA3NH0.L2QDUnez8KjIM8yg9cB9cs-tTq6nedk3CCpuJBjWBEg";            // <-- fill in
+    const SINKOS_AUTH_URL = "http://ravda-boeing.github.io/SinkOSAuth/index.html"; // <-- confirm path
+    const DOCS_BUCKET = "user-documents";
+
+    const MIME_TYPES = {
+      pdf: "application/pdf",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      txt: "text/plain"
+    };
+
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentUser = null;
+    let currentDocId = null;
+    let currentDocName = "Untitled Document";
+    let currentFormat = null;        // 'pdf' | 'docx' | 'txt' | null (never saved)
+    let currentStoragePath = null;
+    let hasUnsavedChanges = false;
+
+    // ---------------------------------------------------------------
+    // Auth gate — redirect to SinkOSAuth if there's no session,
+    // same redirect_to pattern used by the other modules.
+    // ---------------------------------------------------------------
+    async function requireAuth() {
+      const { data: { session }, error } = await sb.auth.getSession();
+      if (error || !session) {
+        const redirectTarget = encodeURIComponent(window.location.href);
+        window.location.href = `${SINKOS_AUTH_URL}?redirect_to=${redirectTarget}`;
+        return null;
+      }
+      currentUser = session.user;
+      const label = document.getElementById('titlebarUser');
+      if (label) label.textContent = currentUser.email || "";
+      return currentUser;
+    }
+
+    sb.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        currentUser = null;
+        const redirectTarget = encodeURIComponent(window.location.href);
+        window.location.href = `${SINKOS_AUTH_URL}?redirect_to=${redirectTarget}`;
+      }
+    });
+
+    const editor = document.getElementById('editor');
+    const editorPage = document.getElementById('editorPage');
+    const fontSelect = document.getElementById('fontSelect');
+    const sizeSelect = document.getElementById('sizeSelect');
+    const fontColor = document.getElementById('fontColor');
+    const highlightColor = document.getElementById('highlightColor');
+    const styleSelect = document.getElementById('styleSelect');
+    const statusText = document.getElementById('statusText');
+    const zoomStatus = document.getElementById('zoomStatus');
+    const fileMenuButton = document.getElementById('fileMenuButton');
+    const fileDropdown = document.getElementById('fileDropdown');
+    const ribbonTabs = document.querySelectorAll('.ribbon-tab');
+    const ribbonHome = document.getElementById('ribbonHome');
+    const ribbonInsert = document.getElementById('ribbonInsert');
+    const ribbonView = document.getElementById('ribbonView');
+    const titlebarDoc = document.getElementById('titlebarDoc');
+
+    const dropOverlay = document.getElementById('dropOverlay');
+    const dropBrowseBtn = document.getElementById('dropBrowseBtn');
+
+    const pickerOverlay = document.getElementById('pickerOverlay');
+    const pickerList = document.getElementById('pickerList');
+    const pickerCloseBtn = document.getElementById('pickerCloseBtn');
+
+    const formatOverlay = document.getElementById('formatOverlay');
+    const formatCloseBtn = document.getElementById('formatCloseBtn');
+
+    let zoomLevel = 1;
+
+    function setStatus(msg) {
+      statusText.textContent = msg;
+      if (!msg || msg === "Ready") return;
+      setTimeout(() => {
+        statusText.textContent = "Ready";
+      }, 2500);
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    editor.addEventListener('input', () => {
+      hasUnsavedChanges = true;
+    });
+
+    // Ribbon tab switching
+    ribbonTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        ribbonTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        const target = tab.getAttribute('data-tab');
+        ribbonHome.style.display = target === 'home' ? 'flex' : 'none';
+        ribbonInsert.style.display = target === 'insert' ? 'flex' : 'none';
+        ribbonView.style.display = target === 'view' ? 'flex' : 'none';
+      });
+    });
+
+    // Font family
+    fontSelect.addEventListener('change', () => {
+      document.execCommand('fontName', false, fontSelect.value);
+      editor.focus();
+    });
+
+    // Font size
+    sizeSelect.addEventListener('change', () => {
+      document.execCommand('fontSize', false, "7");
+      const fonts = editor.querySelectorAll("font[size='7']");
+      fonts.forEach(f => {
+        f.removeAttribute('size');
+        f.style.fontSize = sizeSelect.value;
+      });
+      editor.focus();
+    });
+
+    // Font color
+    fontColor.addEventListener('input', () => {
+      document.execCommand('foreColor', false, fontColor.value);
+      editor.focus();
+    });
+
+    // Highlight color
+    highlightColor.addEventListener('input', () => {
+      document.execCommand('backColor', false, highlightColor.value);
+      editor.focus();
+    });
+
+    // Ribbon buttons (formatting)
+    document.querySelectorAll('.ribbon-btn[data-cmd]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cmd = btn.getAttribute('data-cmd');
+        document.execCommand(cmd, false, null);
+        editor.focus();
+      });
+    });
+
+    // Styles (Normal / H1 / H2 / H3)
+    styleSelect.addEventListener('change', () => {
+      const value = styleSelect.value;
+      let blockTag = 'P';
+      if (value === 'h1') blockTag = 'H1';
+      if (value === 'h2') blockTag = 'H2';
+      if (value === 'h3') blockTag = 'H3';
+      document.execCommand('formatBlock', false, blockTag);
+      editor.focus();
+    });
+
+    // Insert link
+    document.getElementById('insertLinkBtn').addEventListener('click', () => {
+      const selection = window.getSelection();
+      if (!selection || selection.toString().trim() === "") {
+        alert("Select some text first to turn into a link.");
+        return;
+      }
+      const url = prompt("Enter URL (include https://):", "https://");
+      if (url && url.trim() !== "") {
+        document.execCommand('createLink', false, url.trim());
+        setStatus("Link inserted");
+      }
+      editor.focus();
+    });
+
+    // Remove link
+    document.getElementById('removeLinkBtn').addEventListener('click', () => {
+      document.execCommand('unlink', false, null);
+      setStatus("Link removed");
+      editor.focus();
+    });
+
+    // Insert actions
+    document.getElementById('insertImageBtn').addEventListener('click', () => {
+      openImageDropOverlay();
+    });
+
+    document.getElementById('insertLineBtn').addEventListener('click', () => {
+      document.execCommand('insertHorizontalRule', false, null);
+      setStatus("Line inserted");
+      editor.focus();
+    });
+
+    document.getElementById('insertDateBtn').addEventListener('click', () => {
+      const now = new Date();
+      const text = now.toLocaleString();
+      document.execCommand('insertText', false, text);
+      setStatus("Date/time inserted");
+      editor.focus();
+    });
+
+    // Zoom
+    function updateZoom() {
+      editorPage.style.transform = `scale(${zoomLevel})`;
+      editorPage.style.transformOrigin = 'top center';
+      zoomStatus.textContent = Math.round(zoomLevel * 100) + "%";
+    }
+
+    document.getElementById('zoomInBtn').addEventListener('click', () => {
+      zoomLevel = Math.min(2, zoomLevel + 0.1);
+      updateZoom();
+    });
+
+    document.getElementById('zoomOutBtn').addEventListener('click', () => {
+      zoomLevel = Math.max(0.6, zoomLevel - 0.1);
+      updateZoom();
+    });
+
+    // Theme switching
+    document.querySelectorAll('#ribbonView .ribbon-btn[data-theme]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const theme = btn.getAttribute('data-theme');
+        document.body.setAttribute('data-theme', theme);
+        setStatus("Theme: " + (theme === 'light' ? 'Light' : theme === 'pureblack' ? 'Pure Black' : 'Sink Dark'));
+      });
+    });
+
+    // File menu
+    fileMenuButton.addEventListener('click', () => {
+      fileDropdown.classList.toggle('open');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!fileDropdown.contains(e.target) && e.target !== fileMenuButton) {
+        fileDropdown.classList.remove('open');
+      }
+    });
+
+    fileDropdown.querySelectorAll('.file-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        const action = item.getAttribute('data-action');
+        fileDropdown.classList.remove('open');
+
+        if (action === 'new') {
+          if (!hasUnsavedChanges || confirm("Start a new document? Unsaved changes will be lost.")) {
+            editor.innerHTML = "";
+            currentDocId = null;
+            currentDocName = "Untitled Document";
+            currentFormat = null;
+            currentStoragePath = null;
+            titlebarDoc.textContent = "– " + currentDocName;
+            hasUnsavedChanges = false;
+            setStatus("New document");
+          }
+        }
+
+        if (action === 'save') {
+          await saveDocument(false);
+        }
+
+        if (action === 'open') {
+          await openDocumentPicker();
+        }
+
+        if (action === 'saveas') {
+          await saveDocument(true);
+        }
+
+        if (action === 'exportpdf') {
+          await downloadPdfCopy();
+        }
+      });
+    });
+
+    // ---------------------------------------------------------------
+    // Format picker modal — resolves to 'pdf' | 'docx' | 'txt' | null
+    // ---------------------------------------------------------------
+    function pickFormat() {
+      return new Promise((resolve) => {
+        formatOverlay.classList.add('visible');
+
+        function cleanup(result) {
+          formatOverlay.classList.remove('visible');
+          formatOverlay.querySelectorAll('[data-format]').forEach(b => b.removeEventListener('click', onPick));
+          formatCloseBtn.removeEventListener('click', onClose);
+          formatOverlay.removeEventListener('click', onBackdrop);
+          resolve(result);
+        }
+        function onPick(e) {
+          cleanup(e.currentTarget.getAttribute('data-format'));
+        }
+        function onClose() {
+          cleanup(null);
+        }
+        function onBackdrop(e) {
+          if (e.target === formatOverlay) cleanup(null);
+        }
+
+        formatOverlay.querySelectorAll('[data-format]').forEach(b => b.addEventListener('click', onPick));
+        formatCloseBtn.addEventListener('click', onClose);
+        formatOverlay.addEventListener('click', onBackdrop);
+      });
+    }
+
+    // ---------------------------------------------------------------
+    // File generation
+    // ---------------------------------------------------------------
+    async function generatePdfBlob() {
+      const opt = {
+        margin: 15,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' }
+      };
+      return await html2pdf().from(editor).set(opt).outputPdf('blob');
+    }
+
+    function generateDocxBlob() {
+      const htmlString = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(currentDocName)}</title></head><body>${editor.innerHTML}</body></html>`;
+      return htmlDocx.asBlob(htmlString);
+    }
+
+    function generateTxtBlob() {
+      return new Blob([editor.innerText || ""], { type: 'text/plain' });
+    }
+
+    async function generateBlobForFormat(format) {
+      if (format === 'pdf') return generatePdfBlob();
+      if (format === 'docx') return generateDocxBlob();
+      return generateTxtBlob();
+    }
+
+    // ---------------------------------------------------------------
+    // Save / Save As — generates the real file and uploads it to
+    // Supabase Storage, with metadata tracked in the documents table.
+    // ---------------------------------------------------------------
+    async function saveDocument(forceSaveAs) {
+      if (!currentUser) {
+        await requireAuth();
+        if (!currentUser) return;
+      }
+
+      const needsNewTarget = forceSaveAs || !currentDocId;
+      let format = currentFormat;
+      let title = currentDocName;
+
+      if (needsNewTarget) {
+        format = await pickFormat();
+        if (!format) return; // cancelled
+
+        const promptedTitle = (prompt("Save as (file name):", forceSaveAs ? currentDocName : "Untitled Document") || "").trim();
+        if (!promptedTitle) return; // cancelled
+        title = promptedTitle;
+      }
+
+      setStatus("Saving…");
+
+      try {
+        const blob = await generateBlobForFormat(format);
+        const mimeType = MIME_TYPES[format];
+        const path = needsNewTarget
+          ? `${currentUser.id}/${crypto.randomUUID()}.${format}`
+          : currentStoragePath;
+
+        const { error: uploadError } = await sb.storage
+          .from(DOCS_BUCKET)
+          .upload(path, blob, { upsert: true, contentType: mimeType });
+        if (uploadError) throw uploadError;
+
+        if (needsNewTarget) {
+          const { data, error } = await sb
+            .from('documents')
+            .insert({
+              user_id: currentUser.id,
+              title,
+              format,
+              storage_path: path,
+              mime_type: mimeType,
+              size: blob.size
+            })
+            .select()
+            .single();
+          if (error) throw error;
+          currentDocId = data.id;
+        } else {
+          const { error } = await sb
+            .from('documents')
+            .update({
+              title,
+              storage_path: path,
+              mime_type: mimeType,
+              size: blob.size,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', currentDocId);
+          if (error) throw error;
+        }
+
+        currentDocName = title;
+        currentFormat = format;
+        currentStoragePath = path;
+        titlebarDoc.textContent = `– ${currentDocName} (${format.toUpperCase()})`;
+        hasUnsavedChanges = false;
+        setStatus(`Saved as ${format.toUpperCase()}`);
+      } catch (err) {
+        alert("Save failed: " + err.message);
+        setStatus("Save failed");
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // Open — lists saved files, downloads the chosen one back out
+    // of Storage, and reconstructs editor content where possible.
+    // ---------------------------------------------------------------
+    async function openDocumentPicker() {
+      if (!currentUser) {
+        await requireAuth();
+        if (!currentUser) return;
+      }
+
+      pickerList.innerHTML = '<div class="picker-empty">Loading…</div>';
+      pickerOverlay.classList.add('visible');
+
+      const { data, error } = await sb
+        .from('documents')
+        .select('id, title, format, storage_path, updated_at')
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        pickerList.innerHTML = `<div class="picker-empty">Couldn't load documents: ${escapeHtml(error.message)}</div>`;
+        return;
+      }
+
+      renderPickerList(data || []);
+    }
+
+    function renderPickerList(docs) {
+      if (!docs.length) {
+        pickerList.innerHTML = '<div class="picker-empty">No saved documents yet.</div>';
+        return;
+      }
+
+      pickerList.innerHTML = "";
+      docs.forEach(doc => {
+        const row = document.createElement('div');
+        row.className = 'picker-item';
+
+        const info = document.createElement('div');
+        info.className = 'picker-item-info';
+
+        const titleRow = document.createElement('div');
+        titleRow.className = 'picker-item-title-row';
+
+        const title = document.createElement('div');
+        title.className = 'picker-item-title';
+        title.textContent = doc.title || "Untitled Document";
+
+        const badge = document.createElement('span');
+        badge.className = 'format-badge';
+        badge.textContent = doc.format.toUpperCase();
+
+        titleRow.appendChild(title);
+        titleRow.appendChild(badge);
+
+        const date = document.createElement('div');
+        date.className = 'picker-item-date';
+        date.textContent = new Date(doc.updated_at).toLocaleString();
+
+        info.appendChild(titleRow);
+        info.appendChild(date);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'picker-item-delete';
+        deleteBtn.textContent = '🗑';
+        deleteBtn.title = 'Delete';
+        deleteBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!confirm(`Delete "${doc.title}"? This can't be undone.`)) return;
+
+          const { error: storageErr } = await sb.storage.from(DOCS_BUCKET).remove([doc.storage_path]);
+          if (storageErr) {
+            alert("Delete failed: " + storageErr.message);
+            return;
+          }
+          const { error: dbErr } = await sb.from('documents').delete().eq('id', doc.id);
+          if (dbErr) {
+            alert("Delete failed: " + dbErr.message);
+            return;
+          }
+
+          if (currentDocId === doc.id) {
+            currentDocId = null;
+            currentStoragePath = null;
+            currentFormat = null;
+          }
+          row.remove();
+          if (!pickerList.children.length) {
+            pickerList.innerHTML = '<div class="picker-empty">No saved documents yet.</div>';
+          }
+        });
+
+        row.appendChild(info);
+        row.appendChild(deleteBtn);
+        row.addEventListener('click', () => loadDocument(doc));
+
+        pickerList.appendChild(row);
+      });
+    }
+
+    async function loadDocument(doc) {
+      setStatus("Loading…");
+
+      const { data, error } = await sb.storage.from(DOCS_BUCKET).download(doc.storage_path);
+      if (error) {
+        alert("Load failed: " + error.message);
+        setStatus("Load failed");
+        return;
+      }
+
+      if (doc.format === 'pdf') {
+        // PDFs are a read-only export — there's no reliable way to turn
+        // one back into editable, formatted HTML, so we hand back the
+        // file itself instead of pretending to load it into the editor.
+        const url = URL.createObjectURL(data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (doc.title || "document") + ".pdf";
+        a.click();
+        URL.revokeObjectURL(url);
+        pickerOverlay.classList.remove('visible');
+        setStatus("PDF downloaded (read-only format)");
+        return;
+      }
+
+      if (doc.format === 'docx') {
+        const arrayBuffer = await data.arrayBuffer();
+        const result = await mammoth.convertToHtml({ arrayBuffer });
+        editor.innerHTML = result.value;
+      } else if (doc.format === 'txt') {
+        const text = await data.text();
+        editor.innerHTML = escapeHtml(text).replace(/\n/g, '<br>');
+      }
+
+      currentDocId = doc.id;
+      currentDocName = doc.title;
+      currentFormat = doc.format;
+      currentStoragePath = doc.storage_path;
+      titlebarDoc.textContent = `– ${currentDocName} (${doc.format.toUpperCase()})`;
+      hasUnsavedChanges = false;
+      pickerOverlay.classList.remove('visible');
+      setStatus("Document loaded");
+    }
+
+    pickerCloseBtn.addEventListener('click', () => {
+      pickerOverlay.classList.remove('visible');
+    });
+
+    pickerOverlay.addEventListener('click', (e) => {
+      if (e.target === pickerOverlay) {
+        pickerOverlay.classList.remove('visible');
+      }
+    });
+
+    // Quick client-side PDF download — doesn't touch the account,
+    // just a one-off export of the current content.
+    async function downloadPdfCopy() {
+      setStatus("Exporting…");
+      const opt = {
+        margin: 15,
+        filename: (currentDocName || "SinkOS_Document") + ".pdf",
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' }
+      };
+      await html2pdf().from(editor).set(opt).save();
+      setStatus("Downloaded");
+    }
+
+    // Drag & drop image handling
+    const hiddenFileInput = document.createElement('input');
+    hiddenFileInput.type = 'file';
+    hiddenFileInput.accept = 'image/*';
+
+    hiddenFileInput.addEventListener('change', () => {
+      if (hiddenFileInput.files && hiddenFileInput.files[0]) {
+        handleImageFile(hiddenFileInput.files[0]);
+      }
+    });
+
+    function openImageDropOverlay() {
+      dropOverlay.classList.add('visible');
+    }
+
+    function closeImageDropOverlay() {
+      dropOverlay.classList.remove('visible');
+    }
+
+    dropBrowseBtn.addEventListener('click', () => {
+      hiddenFileInput.click();
+    });
+
+    dropOverlay.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+
+    dropOverlay.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        handleImageFile(file);
+      }
+    });
+
+    dropOverlay.addEventListener('click', (e) => {
+      if (e.target === dropOverlay) {
+        closeImageDropOverlay();
+      }
+    });
+
+    function handleImageFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const base64 = e.target.result;
+        document.execCommand('insertImage', false, base64);
+        setStatus("Image inserted");
+        closeImageDropOverlay();
+        editor.focus();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Global drag & drop (optional: allow dropping directly into window)
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file && file.type && file.type.startsWith('image/')) {
+        openImageDropOverlay();
+        handleImageFile(file);
+      }
+    });
+
+    // Warn before leaving with unsaved changes
+    window.addEventListener('beforeunload', (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    // Initial zoom
+    updateZoom();
+
+    // Boot: require an authenticated session before anything else
+    requireAuth();
+  </script>
+</body>
+</html>
