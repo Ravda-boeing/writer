@@ -548,6 +548,14 @@
       color: var(--muted);
     }
 
+    .picker-item-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .picker-item-view,
     .picker-item-delete {
       border: none;
       background: transparent;
@@ -559,9 +567,65 @@
       flex-shrink: 0;
     }
 
+    .picker-item-view:hover {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
     .picker-item-delete:hover {
       background: rgba(232, 17, 35, 0.12);
       color: #e81123;
+    }
+
+    /* Read-only document preview */
+    .preview-panel {
+      width: 860px;
+      max-width: 94vw;
+      height: 86vh;
+    }
+
+    .preview-header-meta {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .preview-body {
+      flex: 1;
+      overflow: auto;
+      background: var(--bg);
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .preview-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #ffffff;
+      border-radius: 4px;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.08);
+    }
+
+    .preview-readonly {
+      width: 800px;
+      max-width: 100%;
+      background: var(--editor-page-bg);
+      color: var(--editor-text);
+      border-radius: 4px;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.18);
+      padding: 40px 60px;
+      line-height: 1.5;
+      font-size: 14px;
+      height: fit-content;
+    }
+
+    .preview-footer {
+      padding: 10px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
     }
 
     .picker-empty {
@@ -664,6 +728,25 @@
       </div>
       <div class="picker-list" id="pickerList">
         <div class="picker-empty">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Read-only document preview overlay (View) -->
+  <div class="drop-overlay" id="previewOverlay">
+    <div class="picker-panel preview-panel">
+      <div class="picker-header">
+        <div>
+          <h2 id="previewTitle">Preview</h2>
+          <div class="preview-header-meta" id="previewMeta"></div>
+        </div>
+        <button class="picker-close" id="previewCloseBtn">✖</button>
+      </div>
+      <div class="preview-body" id="previewBody">
+        <div class="picker-empty">Loading…</div>
+      </div>
+      <div class="preview-footer">
+        <button class="menu-button" id="previewEditBtn">✏ Open for editing</button>
       </div>
     </div>
   </div>
@@ -874,9 +957,9 @@
     // ---------------------------------------------------------------
     // Supabase setup — same project as SinkOSAuth / Chat / Calls / Nexus
     // ---------------------------------------------------------------
-    const SUPABASE_URL = "https://okknkixdbjsnqrwlfgzn.supabase.co";       // <-- fill in
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ra25raXhkYmpzbnFyd2xmZ3puIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NzgwNzQsImV4cCI6MjA5ODE1NDA3NH0.L2QDUnez8KjIM8yg9cB9cs-tTq6nedk3CCpuJBjWBEg";            // <-- fill in
-    const SINKOS_AUTH_URL = "http://ravda-boeing.github.io/SinkOSAuth/index.html"; // <-- confirm path
+    const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";       // <-- fill in
+    const SUPABASE_ANON_KEY = "YOUR-SUPABASE-ANON-KEY";            // <-- fill in
+    const SINKOS_AUTH_URL = "https://ravda-boeing.github.io/SinkOSAuth/index.html"; // <-- confirm path
     const DOCS_BUCKET = "user-documents";
 
     const MIME_TYPES = {
@@ -945,6 +1028,16 @@
 
     const formatOverlay = document.getElementById('formatOverlay');
     const formatCloseBtn = document.getElementById('formatCloseBtn');
+
+    const previewOverlay = document.getElementById('previewOverlay');
+    const previewTitle = document.getElementById('previewTitle');
+    const previewMeta = document.getElementById('previewMeta');
+    const previewBody = document.getElementById('previewBody');
+    const previewCloseBtn = document.getElementById('previewCloseBtn');
+    const previewEditBtn = document.getElementById('previewEditBtn');
+
+    let previewObjectUrl = null;
+    let previewDoc = null;
 
     let zoomLevel = 1;
 
@@ -1186,7 +1279,17 @@
     }
 
     function generateDocxBlob() {
-      const htmlString = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(currentDocName)}</title></head><body>${editor.innerHTML}</body></html>`;
+      // NOTE: the closing tags below are deliberately built as string
+      // concatenation, not written literally. Dev servers like Live Server
+      // scan the raw file for the text "</body>" to inject their
+      // auto-reload script right before it. If that text appears literally
+      // inside this template string, Live Server injects its script into
+      // the middle of this JS string instead of the real </body> at the
+      // end of the file, corrupting the whole document. Splitting the tag
+      // like this keeps the literal substring out of the source.
+      const closeBody = "</" + "body>";
+      const closeHtml = "</" + "html>";
+      const htmlString = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(currentDocName)}</title></head><body>${editor.innerHTML}${closeBody}${closeHtml}`;
       return htmlDocx.asBlob(htmlString);
     }
 
@@ -1339,6 +1442,18 @@
         info.appendChild(titleRow);
         info.appendChild(date);
 
+        const actions = document.createElement('div');
+        actions.className = 'picker-item-actions';
+
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'picker-item-view';
+        viewBtn.textContent = '👁';
+        viewBtn.title = 'View';
+        viewBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openPreview(doc);
+        });
+
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'picker-item-delete';
         deleteBtn.textContent = '🗑';
@@ -1369,8 +1484,11 @@
           }
         });
 
+        actions.appendChild(viewBtn);
+        actions.appendChild(deleteBtn);
+
         row.appendChild(info);
-        row.appendChild(deleteBtn);
+        row.appendChild(actions);
         row.addEventListener('click', () => loadDocument(doc));
 
         pickerList.appendChild(row);
@@ -1420,6 +1538,75 @@
       pickerOverlay.classList.remove('visible');
       setStatus("Document loaded");
     }
+
+    // ---------------------------------------------------------------
+    // View — read-only preview. Downloads the file and renders it
+    // without touching the editor or currentDocId/currentDocName state,
+    // so viewing something never risks overwriting what you're working on.
+    // ---------------------------------------------------------------
+    async function openPreview(doc) {
+      previewDoc = doc;
+      previewTitle.textContent = doc.title || "Untitled Document";
+      previewMeta.textContent = `${doc.format.toUpperCase()} · last saved ${new Date(doc.updated_at).toLocaleString()}`;
+      previewBody.innerHTML = '<div class="picker-empty">Loading…</div>';
+      previewEditBtn.style.display = doc.format === 'pdf' ? 'none' : 'inline-block';
+      previewOverlay.classList.add('visible');
+
+      const { data, error } = await sb.storage.from(DOCS_BUCKET).download(doc.storage_path);
+      if (error) {
+        previewBody.innerHTML = `<div class="picker-empty">Couldn't load preview: ${escapeHtml(error.message)}</div>`;
+        return;
+      }
+
+      if (doc.format === 'pdf') {
+        revokePreviewUrl();
+        previewObjectUrl = URL.createObjectURL(data);
+        previewBody.innerHTML = `<iframe class="preview-frame" src="${previewObjectUrl}"></iframe>`;
+      } else if (doc.format === 'docx') {
+        const arrayBuffer = await data.arrayBuffer();
+        const result = await mammoth.convertToHtml({ arrayBuffer });
+        const readonly = document.createElement('div');
+        readonly.className = 'preview-readonly';
+        readonly.innerHTML = result.value;
+        previewBody.innerHTML = "";
+        previewBody.appendChild(readonly);
+      } else {
+        const text = await data.text();
+        const readonly = document.createElement('div');
+        readonly.className = 'preview-readonly';
+        readonly.innerHTML = escapeHtml(text).replace(/\n/g, '<br>');
+        previewBody.innerHTML = "";
+        previewBody.appendChild(readonly);
+      }
+    }
+
+    function revokePreviewUrl() {
+      if (previewObjectUrl) {
+        URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = null;
+      }
+    }
+
+    function closePreview() {
+      previewOverlay.classList.remove('visible');
+      previewBody.innerHTML = "";
+      revokePreviewUrl();
+      previewDoc = null;
+    }
+
+    previewCloseBtn.addEventListener('click', closePreview);
+
+    previewOverlay.addEventListener('click', (e) => {
+      if (e.target === previewOverlay) closePreview();
+    });
+
+    previewEditBtn.addEventListener('click', async () => {
+      if (!previewDoc) return;
+      const doc = previewDoc;
+      closePreview();
+      pickerOverlay.classList.remove('visible');
+      await loadDocument(doc);
+    });
 
     pickerCloseBtn.addEventListener('click', () => {
       pickerOverlay.classList.remove('visible');
